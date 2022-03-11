@@ -1,0 +1,12 @@
+{% from "_formhelpers.html" import render_field %}
+<div>
+    <h3>Encrypt a Message</h3>
+
+    <form method=post>
+        <dl>
+        {{ render_field(eform.msg) }}
+        {{ render_field(eform.A) }}
+        </dl>
+        {{ eform.encrypt }}
+    </form>
+</div>

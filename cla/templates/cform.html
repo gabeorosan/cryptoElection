@@ -1,0 +1,10 @@
+{% from "_formhelpers.html" import render_field %}
+<div>
+  <form method=post name=register>
+    <h3>Create Citizens</h3>
+    <dl>
+      {{ render_field(cform.name) }}
+    </dl>
+    {{ cform.create }}
+  </form>
+</div>

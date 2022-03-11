@@ -1,0 +1,14 @@
+{% from "_formhelpers.html" import render_field %}
+<div>
+  <form method=post name=vform>
+    <h3>Register to Vote</h3>
+    <dl>
+      {{ render_field(rform.e_id) }}
+      {{ render_field(rform.A) }}
+      {{ render_field(rform.rsapub_n) }}
+      {{ render_field(rform.rsapub_e) }}
+    </dl>
+    {{ rform.register }}
+
+  </form>
+</div>

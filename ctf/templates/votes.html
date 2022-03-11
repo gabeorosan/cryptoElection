@@ -1,0 +1,10 @@
+<div style="width:20vw;height:45vh;overflow: auto;">
+    <h3>Votes</h3>
+    {% for v in votes%}
+    <div style="border-top:black 2px solid;">
+        <p>candidate: {{ v.candidate }}</p>
+        <p>hash vn: </p>
+        <p>{{ v.hash_vn }}</p>
+    </div>
+    {% endfor %}
+</div>

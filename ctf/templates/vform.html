@@ -1,0 +1,14 @@
+{% from "_formhelpers.html" import render_field %}
+<div>
+    <h3>Vote</h3>
+    <form method=post>
+        <dl>
+        {{ render_field(vform.e_vn) }}
+        {{ render_field(vform.candidate) }}
+        {{ render_field(vform.A) }}
+        {{ render_field(vform.n) }}
+        {{ render_field(vform.e) }}
+        </dl>
+        {{vform.castvote}}
+    </form>
+</div>

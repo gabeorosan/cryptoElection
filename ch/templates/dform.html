@@ -1,0 +1,13 @@
+{% from "_formhelpers.html" import render_field %}
+<div>
+    <h3>Decrypt a Response</h3>
+
+    <form method=post>
+        <dl>
+        {{ render_field(dform.msg) }}
+        {{ render_field(dform.rsapub_n) }}
+        {{ render_field(dform.rsapub_e) }}
+        </dl>
+        {{ dform.decrypt }}
+    </form>
+</div>

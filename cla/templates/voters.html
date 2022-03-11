@@ -1,0 +1,12 @@
+<div style="width: 20vw;height:45vh;overflow:auto;">
+    <h3>Voters</h3>
+    {% for v in voters%}
+    <div style="border-top: 2px black solid">
+        <p>hash id: </p>
+        <p name="vhash id">{{ v.hash_id }}</p>
+        <p>hash vn:</p>
+        <p name="hash vn">{{ v.hash_vn }}</p>
+    </div>  
+    {% endfor %}
+
+</div>

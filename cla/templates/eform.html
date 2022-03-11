@@ -1,0 +1,10 @@
+{% from "_formhelpers.html" import render_field %}
+<div>
+<form method=post name=eform>
+  <h3>Start Election</h3>
+  <dl>
+    {{ render_field(eform.timelength) }}
+  </dl>
+  {{ eform.startelection}}
+</form>
+</div>

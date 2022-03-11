@@ -1,0 +1,12 @@
+
+<div style="width:20vw;height:45vh;overflow: auto;">
+    <h3>DHKE</h3>
+    {% for dh in dhke%}
+            <p>group: {{ dh.group }}</p>
+            <p>g: {{ dh.g }}</p>
+            <p>p: {{ dh.p }}</p>
+            <p>a: {{ dh.a }}</p>
+            <p>public (A) : <span name="A">{{ dh.public }}</span></p>
+            <p>shared: {{ dh.key }}</p>
+    {% endfor %}
+</div>

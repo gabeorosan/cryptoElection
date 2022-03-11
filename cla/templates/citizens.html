@@ -1,0 +1,11 @@
+<div style="width:20vw;height:45vh;overflow: scroll;">
+    <h3>Citizens</h3>
+    {% for c in citizens%}
+    <div style="border-top:black 2px solid;">
+        <p>{{ c.name }}</p>
+        id: <span name="id">{{ c.id }}</span>
+        <p>hash id:</p>
+        <p name='vhash id'>{{ c.hash_id }}</p>
+    </div>
+    {% endfor %}
+</div>
