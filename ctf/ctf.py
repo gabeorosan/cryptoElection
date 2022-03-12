@@ -1,16 +1,11 @@
-from flask import Flask, redirect, render_template, request, flash, url_for, make_response, jsonify
-from flask_restful import reqparse, abort, Api, Resource
+from flask import Flask, redirect, render_template, request
 import os
-import json
-import uuid
 from sqlalchemy import Column, String, BLOB, Integer
 from sqlalchemy import create_engine
 from sqlalchemy.orm import scoped_session, sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 from VoteForm import VoteForm
 from InitForm import InitForm
-import datetime
-import random
 import requests
 import rsa
 import pyDHE
@@ -28,8 +23,16 @@ engine = create_engine('sqlite:///sqlite/ctf.db', echo=True)
 db_session = scoped_session(sessionmaker(autocommit=False,
                                          autoflush=True,
                                          bind=engine))
+
+@app.teardown_appcontext
+def teardown_db(error):
+    db_session.close()
+    engine.dispose()
+
 Base = declarative_base()
 Base.query = db_session.query_property()
+
+
 
 def shash(x):
     assert type(x) == str
@@ -130,6 +133,7 @@ class DHKE(Base):
         public = {self.public!r}
         shared key = {self.key!r}
         '''
+
 class Outcome(Base):
     __tablename__ = 'outcomes'
     __table_args__ = {'extend_existing': True}
@@ -140,6 +144,15 @@ class Outcome(Base):
         self.result_message = msg
     def __repr__(self):
         return self.result_message
+
+def query_all_classes():
+    candidates = Candidate.query.all()
+    votes = Vote.query.all()
+    rsakeys = RSA.query.all()
+    dhke = DHKE.query.all()
+    outcomes = Outcome.query.all()
+    return [candidates, votes, rsakeys, dhke, outcomes]
+
 def clear_class(c):
     instances = c.query.all()
     for i in instances:
@@ -158,6 +171,7 @@ def dhke_renew():
 
 def dhke_get_shared(A):
     dh = DHKE.query.one()
+    dhke_renew()
     return pow(int(A), int(dh.a), int(dh.p))
 
 def get_aes(shared):
@@ -189,7 +203,6 @@ def decrypt(y, shared, n, e):
     msgs['aes_enc'] = y
     msgs['aes_raw'] = aes.decrypt(msgs['aes_enc'])
     msgs['aes_dec'] = str(msgs['aes_raw']).split('\\')[0][2:]
-    print(repr(msgs['aes_dec']))
     msgs['rsa_dec'] = rsa.core.decrypt_int(int(msgs['aes_dec']), int(e), int(n)).to_bytes(hash_len, byteorder='big')
     return msgs['rsa_dec']
 
@@ -218,7 +231,6 @@ def get_election_result():
             result += ', ' + cs[i]
     result += ' with ' + str(max_tally) + ' votes'
     o = Outcome(result)
-    print('outcome: ',o)
     db_session.add(o)
     db_session.commit()
     return result
@@ -227,7 +239,7 @@ def get_election_result():
 def home(): 
     iform = InitForm(request.form)
     vform = VoteForm(request.form)
-    res = {}
+    res = []
     msgs = {}
     outcome = Outcome.query.all()
     if request.method=='POST':
@@ -235,29 +247,22 @@ def home():
             reset_all()
 
         elif vform.castvote.data and vform.validate():
-            if not len(outcome):
-                print(vform.e_vn.data)
-                e_vn = eval(vform.e_vn.data)
+            if len(outcome): res.append('Election already ended')
+            else:    
+                e_vn = literal_eval(vform.e_vn.data)
                 candidate = vform.candidate.data
                 A = int(vform.A.data)
                 n = int(vform.n.data)
                 e = int(vform.e.data)
-
-                voter_shared = dhke_get_shared(A)
-                dhke_renew()
-                dh = DHKE.query.one()
-                dhres = requests.get('http://localhost:3000/vn-list')
-                resdict = eval(dhres._content)
-                cla_A = resdict['A']
-                cla_shared = dhke_get_shared(cla_A)
                 
+                voter_shared = dhke_get_shared(A)
+                vn_res = requests.get('http://localhost:3000/vn-list')
+                resdict = vn_res.json()
+                cla_A = resdict['A']
                 vn = decrypt(e_vn, voter_shared, n, e)
-                vn_list = [decrypt(eval(v), cla_shared, resdict['n'], resdict['e']) for v in resdict['e_vns']]
-                if vn not in vn_list:
-                    assert False
-                    print(vn, vn_list)
-                    print(e_vn)
-                    print(len(e_vn))
+
+                cla_shared = dhke_get_shared(cla_A)
+                vn_list = [decrypt(literal_eval(v), cla_shared, resdict['n'], resdict['e']) for v in resdict['e_vns']]
                 votes = Vote.query.all()
                 if vn in vn_list and vn not in [v.hash_vn for v in votes]:
                     vote = Vote(vn, vform.candidate.data)
@@ -265,27 +270,23 @@ def home():
                     db_session.commit()
                     candidates = Candidate.query.all()
                     candidate = vform.candidate.data
-                    print(candidate)
-                    print([c.name for c in candidates])
                     if candidate not in [c.name for c in candidates]:
-                        candidate = Candidate(candidate)
-                        db_session.add(candidate)
+                        new_candidate = Candidate(candidate)
+                        db_session.add(new_candidate)
                         db_session.commit()
                     else:
-                        candidate = Candidate.query.filter_by(name=candidate).first()
-                        candidate.tally +=1
-                        db_session.add(candidate)
+                        update_candidate = Candidate.query.filter_by(name=candidate).first()
+                        update_candidate.tally +=1
+                        db_session.add(update_candidate)
                         db_session.commit()
-    candidates = Candidate.query.all()
-    votes = Vote.query.all()
-    rsakeys = RSA.query.all()
-    dhke = DHKE.query.all()
-    
-    print(outcome)
+                    res.append('Vote successful')
+                else:res.append('Vote unsuccessful')
+    candidates, votes, rsakeys, dhke, outcome= query_all_classes()
     return render_template('home.html', iform=iform, vform=vform, votes=votes, candidates=candidates, rsakeys=rsakeys,
     dhke=dhke, res=res, msgs=msgs, outcome=outcome)
+
 @app.route("/init", methods=['POST'])
-def reset():
+def init():
     reset_all()
     return 're-initialized'
 
@@ -293,8 +294,7 @@ def reset():
 def public_keys(): 
     rsakeys = RSA.query.one()
     dh = DHKE.query.one()
-    res = {}
-    res['A'] =dh.public
+    res = {'A': dh.public}
     return res
 
 @app.route("/finish-election", methods=['POST'])

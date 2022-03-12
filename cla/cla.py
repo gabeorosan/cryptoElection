@@ -23,13 +23,16 @@ app.secret_key = skey
 root_url = 'http://localhost:4000/'
 election_length = 5
 
-
 engine = create_engine('sqlite:///sqlite/cla.db', echo=True)
 db_session = scoped_session(sessionmaker(autocommit=False,
                                          autoflush=True,
                                          bind=engine))
 Base = declarative_base()
 Base.query = db_session.query_property()
+@app.teardown_appcontext
+def teardown_db(error):
+    db_session.close()
+    engine.dispose()
 
 hash_len = 20
 
@@ -100,7 +103,6 @@ class Election(Base):
         sec = self.current_time
         if sec > 0:
             sec -= 1
-            print(self.current_time)
             self.current_time = sec
             time_disp = zpad(sec//60) + ':' + zpad(sec%60)
             return time_disp
@@ -228,18 +230,15 @@ def decrypt(y, aes, n, e):
     return msgs
 
 def encrypt(x, aes):
-    assert type(x) == bytes
-    assert len(x) == hash_len
-    intx = int.from_bytes(x, byteorder='big', signed=False)
+    assert type(x) == int
     rsakeys = RSA.query.one()
     msgs = {}
-    msgs['x'] = x
-    msgs['intx'] = intx
-    msgs['rsa_enc'] = rsa.core.encrypt_int(intx, int(rsakeys.d), int(rsakeys.n))
+    msgs['intx'] = x
+    msgs['rsa_enc'] = rsa.core.encrypt_int(x, int(rsakeys.d), int(rsakeys.n))
     msgs['aes_enc'] = aes.encrypt(str(msgs['rsa_enc']))
     return msgs
 
-def encrypt_sign(x, shared):
+def encrypt_bytes(x, shared):
     assert type(shared) == int
     assert type(x) == bytes
     aes = get_aes(shared)
@@ -250,25 +249,6 @@ def encrypt_sign(x, shared):
     msgs['rsa_enc'] = rsa.core.encrypt_int(intx, int(rsakeys.d), int(rsakeys.n))
     msgs['aes_enc'] = aes.encrypt(str(msgs['rsa_enc']))
     return msgs['aes_enc']
-
-def get_validation(A, e_id, n, e):
-    assert type(e_id) == bytes
-    assert type(n) == int
-    assert type(e) == int
-    shared = dhke_get_shared(A)
-    aes = get_aes(shared)
-    msgs = decrypt(e_id, aes, n, e)
-    citizens = Citizen.query.all()
-    voters = Voter.query.all()
-    if msgs['rsa_dec'] in [c.hash_id for c in citizens] and msgs['rsa_dec'] not in [v.hash_id for v in voters]:
-        vn = random.SystemRandom().randint(1000000000, 9999999999)
-
-        voter = Voter(msgs['rsa_dec'],str(vn), str(shared))
-        msgs.update(encrypt(vn, aes))
-        db_session.add(voter)
-        db_session.commit()
-        msgs['res'] = msgs['aes_enc']
-    return msgs
 
 @app.route("/", methods=['GET', 'POST'])
 def home(): 
@@ -285,63 +265,27 @@ def home():
             res.append(citizen.id)
 
         elif rform.register.data and rform.validate():
-            print(rform.e_id.data)
             e_id = literal_eval(rform.e_id.data)
             A = int(rform.A.data)
             n = int(rform.rsapub_n.data)
             e = int(rform.rsapub_e.data)
-            if rform.msgs.data:
-                ch_msgs = literal_eval(rform.msgs.data)
-                enc_id = literal_eval(ch_msgs['aes_enc'])
-                assert enc_id == e_id
-                shared = dhke_get_shared(A)
-                assert shared == int(ch_msgs['shared'])
-                aes = get_aes(shared)
-                y = e_id
-                msgs['aes_enc'] = y
-                msgs['aes_dec'] = aes.decrypt(msgs['aes_enc'])
-                msgs['aes_dec'] = str(msgs['aes_dec']).split('\\')[0][2:]
-                msgs['rsa_dec'] = rsa.core.decrypt_int(int(msgs['aes_dec']), e, n).to_bytes(hash_len, byteorder='big')
-                assert literal_eval(ch_msgs['hash']) == msgs['rsa_dec']
-                citizens = Citizen.query.all()
-                voters = Voter.query.all()
-                assert msgs['rsa_dec']== citizens[-1].hash_id
-                if msgs['rsa_dec'] in [c.hash_id for c in citizens] and msgs['rsa_dec'] not in [v.hash_id for v in voters]:
-                    vn = random.SystemRandom().randint(1000000000, 9999999999)
-
-                    voter = Voter(msgs['rsa_dec'], str(vn), str(shared))
-                    rsakeys = RSA.query.one()
-                    msgs = {}
-                    msgs['intx'] = vn
-                    msgs['rsa_enc'] = rsa.core.encrypt_int(vn, int(rsakeys.d), int(rsakeys.n))
-                    msgs['aes_enc'] = aes.encrypt(str(msgs['rsa_enc']))
-                    db_session.add(voter)
-                    db_session.commit()
-                    res.append(msgs['aes_enc'])
-            else:
-                shared = dhke_get_shared(A)
-                aes = get_aes(shared)
-                y = e_id
-                msgs['aes_enc'] = y
-                msgs['aes_dec'] = aes.decrypt(msgs['aes_enc'])
-                msgs['aes_dec'] = str(msgs['aes_dec']).split('\\')[0][2:]
-                msgs['rsa_dec'] = rsa.core.decrypt_int(int(msgs['aes_dec']), e, n).to_bytes(hash_len, byteorder='big')
-                citizens = Citizen.query.all()
-                voters = Voter.query.all()
-                if msgs['rsa_dec'] in [c.hash_id for c in citizens] and msgs['rsa_dec'] not in [v.hash_id for v in voters]:
-                    vn = random.SystemRandom().randint(1000000000, 9999999999)
-
-                    voter = Voter(msgs['rsa_dec'], str(vn), str(shared))
-                    rsakeys = RSA.query.one()
-                    msgs = {}
-                    msgs['intx'] = vn
-                    msgs['rsa_enc'] = rsa.core.encrypt_int(vn, int(rsakeys.d), int(rsakeys.n))
-                    msgs['aes_enc'] = aes.encrypt(str(msgs['rsa_enc']))
-                    db_session.add(voter)
-                    db_session.commit()
-                    res.append(msgs['aes_enc'])
-                
-            #msgs = get_validation(A, e_id, n, e)
+        
+            shared = dhke_get_shared(A)
+            aes = get_aes(shared)
+            y = e_id
+            msgs['aes_enc'] = y
+            msgs['aes_dec'] = aes.decrypt(msgs['aes_enc'])
+            msgs['aes_dec'] = str(msgs['aes_dec']).split('\\')[0][2:]
+            msgs['rsa_dec'] = rsa.core.decrypt_int(int(msgs['aes_dec']), e, n).to_bytes(hash_len, byteorder='big')
+            citizens = Citizen.query.all()
+            voters = Voter.query.all()
+            if msgs['rsa_dec'] in [c.hash_id for c in citizens] and msgs['rsa_dec'] not in [v.hash_id for v in voters]:
+                vn = random.SystemRandom().randint(1000000000, 9999999999)
+                voter = Voter(msgs['rsa_dec'], str(vn), str(shared))
+                db_session.add(voter)
+                db_session.commit()
+                msgs = encrypt(vn, aes)
+                res.append(msgs['aes_enc'])
 
         elif iform.init.data and iform.validate():
             clear_all_classes()
@@ -350,10 +294,8 @@ def home():
             db_session.add(Election())
             db_session.commit()
             requests.post('http://localhost:4000/init')
-    if 'res' in msgs.keys():
-        res.append(msgs['res'])
+
     citizens, voters, elections, rsakeys, dhke = query_all_classes()
-    print(elections)
     return render_template('home.html', iform=iform, cform=cform, rform=rform, msgs=msgs, citizens=citizens, voters=voters, elections=elections, rsakeys=rsakeys, dhke=dhke, res=res)
 
 @app.route("/vn-list", methods=['GET'])
@@ -367,11 +309,9 @@ def get_vn_list():
     renew_dhke()
     voters = Voter.query.all()
 
-    print(voters)
-    e_vns = [str(encrypt_sign(v.hash_vn, shared)) for v in voters]
+    e_vns = [str(encrypt_bytes(v.hash_vn, shared)) for v in voters]
     rsakeys = RSA.query.one()
-    
-    return {'e_vns': e_vns, 'A': dh.public, 'n': rsakeys.n, 'e':rsakeys.e}
+    return jsonify({"e_vns": e_vns, "A": dh.public, "n": rsakeys.n, "e":rsakeys.e})
 
 @app.route("/finish-election", methods=['POST'])
 def finish_election():
@@ -380,8 +320,7 @@ def finish_election():
     e.status = "Finished"
     db_session.add(e)
     db_session.commit()
-    print('done')
-    return
+    return 'done'
 
 @app.route("/_timer", methods=["GET", "POST"])
 def timer():

@@ -22,6 +22,10 @@ db_session = scoped_session(sessionmaker(autocommit=False,
                                          bind=engine))
 Base = declarative_base()
 Base.query = db_session.query_property()
+@app.teardown_appcontext
+def teardown_db(error):
+    db_session.close()
+    engine.dispose()
 
 hash_len = 20
 
@@ -143,14 +147,11 @@ def encrypt(x, aes):
     msgs['aes_enc'] = aes.encrypt(str(msgs['rsa_enc']))
     msgs['aes_dec'] = aes.decrypt(msgs['aes_enc'])
     msgs['aes_dec'] = str(msgs['aes_dec']).split('\\')[0][2:]
-    print(repr(msgs['aes_dec']))
-    print(rsakeys.e, rsakeys.n)
     msgs['rsa_dec'] = rsa.core.decrypt_int(int(msgs['aes_dec']), int(rsakeys.e), int(rsakeys.n)).to_bytes(hash_len, byteorder='big')
     return msgs
 
 def decrypt(y, aes, n, e):
     assert type(y) == bytes
-    assert len(y) == hash_len
     assert type(n) == int
     assert type(e) == int
     msgs = {}
@@ -183,20 +184,11 @@ def home():
         elif dform.decrypt.data and dform.validate():
             n = int(dform.rsapub_n.data)
             e = int(dform.rsapub_e.data)
-            msg = dform.msg.data
+            msg = literal_eval(dform.msg.data)
             dh = DHKE.query.all()[0]
             shared = int(dh.key)
             aes = get_aes(str(shared))
-            y = literal_eval(msg)
-            assert type(y) == bytes
-            assert type(n) == int
-            assert type(e) == int
-            msgs = {}
-            msgs['aes_enc'] = y
-            msgs['aes_dec'] = aes.decrypt(msgs['aes_enc'])
-            msgs['aes_dec'] = str(msgs['aes_dec']).split('\\')[0][2:]
-            print(msgs['aes_dec'])
-            msgs['rsa_dec'] = rsa.core.decrypt_int(int(msgs['aes_dec']), int(e), int(n)).to_bytes(hash_len, byteorder='big')
+            msgs = decrypt(msg, aes, n, e)
             res.append(msgs['rsa_dec'])
 
             if len(res) > 0:

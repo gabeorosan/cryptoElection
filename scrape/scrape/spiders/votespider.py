@@ -12,7 +12,7 @@ dform = {}
 eform2 = {}
 vform = {}
 msgs = {}
-auto_finish = False
+auto_finish = True
 class VoteSpider(scrapy.Spider):
     name = "votespider"
 
