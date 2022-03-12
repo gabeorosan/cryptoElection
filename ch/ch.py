@@ -22,7 +22,7 @@ app.secret_key = os.urandom(12).hex()
 
 
 engine = create_engine('sqlite:///sqlite/ch.db', echo=True)
-db_session = scoped_session(sessionmaker(autocommit=True,
+db_session = scoped_session(sessionmaker(autocommit=False,
                                          autoflush=True,
                                          bind=engine))
 Base = declarative_base()
@@ -111,6 +111,7 @@ def dhke_get_shared(A):
     shared = str(pow(int(A), int(dh.a), int(dh.p)))
     dh.key = shared
     db_session.add(dh)
+    db_session.commit()
     return shared
 
 def clear_class(c):
@@ -118,13 +119,16 @@ def clear_class(c):
     for i in instances:
         db_session.delete(i)
 
+    db_session.commit()
 def dhke_renew():
     clear_class(DHKE)
     db_session.add(DHKE())
+    db_session.commit()
 
 def rsa_renew():
     clear_class(RSA)
     db_session.add(RSA())
+    db_session.commit()
 
 def get_aes(shared):
     assert type(shared) == str 

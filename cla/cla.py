@@ -20,7 +20,7 @@ skey = os.urandom(12).hex()
 app.secret_key = skey
 
 engine = create_engine('sqlite:///sqlite/cla.db', echo=True)
-db_session = scoped_session(sessionmaker(autocommit=True,
+db_session = scoped_session(sessionmaker(autocommit=False,
                                          autoflush=True,
                                          bind=engine))
 Base = declarative_base()
@@ -69,19 +69,19 @@ class Voter(Base):
         self.shared = shared
         self.hash_vn = shash(vn)
     def __repr__(self):
-        return f'<Voter id {self.id!r} hash vn = {self.hash_vn!r} Shared key = {self.shared!r}>'
+        return f'<Voter id {self.hash_id!r} hash vn = {self.hash_vn!r} Shared key = {self.shared!r}>'
 
 class Election(Base):
     __tablename__ = 'election'
     __table_args__ = {'extend_existing': True} 
     start = Column(String, primary_key=True)
-    end = Column(String)
+    status = Column(String)
     
-    def __init__(self, start, end):
+    def __init__(self, start):
         self.start = start
-        self.end = end
+        self.status = 'In progress'
     def __repr__(self):
-        return f'<Start time {self.start!r} End time = {self.end!r}>'
+        return f'<Start time {self.start!r} {self.status}>'
 
 class RSA(Base):
     __tablename__ = 'rsa'
@@ -162,13 +162,16 @@ def clear_class(c):
     instances = c.query.all()
     for i in instances:
         db_session.delete(i)
+    db_session.commit()
 
 def renew_dhke():
     clear_class(DHKE)
     db_session.add(DHKE())
+    db_session.commit()
 def renew_rsa():
     clear_class(RSA)
     db_session.add(RSA())
+    db_session.commit()
 
 def dhke_get_shared(A):
     dh = DHKE.query.one()
@@ -233,9 +236,10 @@ def get_validation(A, e_id, n, e):
     if msgs['rsa_dec'] in [c.hash_id for c in citizens] and msgs['rsa_dec'] not in [v.hash_id for v in voters]:
         vn = random.SystemRandom().randint(1000000000, 9999999999)
 
-        voter = Voter(msgs['rsa_dec'], shared, vn)
+        voter = Voter(msgs['rsa_dec'],str(vn), str(shared))
         msgs.update(encrypt(vn, aes))
         db_session.add(voter)
+        db_session.commit()
         msgs['res'] = msgs['aes_enc']
     return msgs
 
@@ -244,14 +248,13 @@ def home():
     iform = InitForm(request.form)
     cform = CreateForm(request.form)
     rform = RegisterForm(request.form)
-    eform = ElectionForm(request.form)
     msgs = {}
     res = []
-    clear_class(Voter)    
     if request.method=='POST':
         if cform.create.data and cform.validate():
             citizen = Citizen(cform.name.data)
             db_session.add(citizen)
+            db_session.commit()
             res.append(citizen.id)
 
         elif rform.register.data and rform.validate():
@@ -286,6 +289,7 @@ def home():
                     msgs['rsa_enc'] = rsa.core.encrypt_int(vn, int(rsakeys.d), int(rsakeys.n))
                     msgs['aes_enc'] = aes.encrypt(str(msgs['rsa_enc']))
                     db_session.add(voter)
+                    db_session.commit()
                     res.append(msgs['aes_enc'])
             else:
                 shared = dhke_get_shared(A)
@@ -307,28 +311,25 @@ def home():
                     msgs['rsa_enc'] = rsa.core.encrypt_int(vn, int(rsakeys.d), int(rsakeys.n))
                     msgs['aes_enc'] = aes.encrypt(str(msgs['rsa_enc']))
                     db_session.add(voter)
+                    db_session.commit()
                     res.append(msgs['aes_enc'])
                 
             #msgs = get_validation(A, e_id, n, e)
 
-        elif eform.startelection.data and eform.validate():
-            clear_class(Election)
-            start = datetime.datetime.now()
-            end = start + datetime.timedelta(minutes=eform.timelength.data)
-            election = Election(start, end)
-            db_session.add(election)
-        
         elif iform.init.data and iform.validate():
-
             clear_all_classes()
             renew_rsa()
             renew_dhke()
+            start = datetime.datetime.now()
+            election = Election(start)
+            db_session.add(election)
+            db_session.commit()
+            requests.post('http://localhost:4000/init')
     if 'res' in msgs.keys():
-        print(type(msgs['res']))
-        print(msgs['res'])
         res.append(msgs['res'])
     citizens, voters, elections, rsakeys, dhke = query_all_classes()
-    return render_template('home.html', iform=iform, cform=cform, rform=rform, eform=eform, msgs=msgs, citizens=citizens, voters=voters, elections=elections, rsakeys=rsakeys, dhke=dhke, res=res)
+    print(elections)
+    return render_template('home.html', iform=iform, cform=cform, rform=rform, msgs=msgs, citizens=citizens, voters=voters, elections=elections, rsakeys=rsakeys, dhke=dhke, res=res)
 
 @app.route("/vn-list", methods=['GET'])
 def get_vn_list(): 
@@ -341,9 +342,20 @@ def get_vn_list():
 
     renew_dhke()
     voters = Voter.query.all()
+
+    print(voters)
     e_vns = [str(encrypt_sign(v.hash_vn, shared)) for v in voters]
     rsakeys = RSA.query.one()
     return {'e_vns': e_vns, 'A': dh.public, 'n': rsakeys.n, 'e':rsakeys.e}
+
+@app.route("/finish-election", methods=['POST'])
+def finish_election():
+    e = Election.query.one()
+    e.status = "Finished"
+    db_session.add(e)
+    db_session.commit()
+    print('done')
+    return
 
 if __name__ == '__main__':
     with app.app_context():

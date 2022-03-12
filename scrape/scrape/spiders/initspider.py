@@ -23,7 +23,7 @@ class InitSpider(scrapy.Spider):
                                         callback = self.get_ctf,
                                         dont_filter=True)
     def get_ctf(self, response):
-        yield scrapy.Request(url=self.urls['ctf_url'], callback=self.ctf_init, dont_filter=True)
+        yield scrapy.Request(url=self.urls['ctf_url'], callback=self.get_ch, dont_filter=True)
 
     def ctf_init(self, response):
         yield FormRequest.from_response(response,

@@ -3,7 +3,8 @@ from scrapy import FormRequest
 from scrapy.selector import Selector
 from scrapy.http import HtmlResponse
 import random
-voters = ['hinata', 'kageyama', 'hoshino', 'tsukimoto', 'tsukishima']
+import requests
+voters = ['hinata', 'kageyama', 'hoshino', 'tsukimoto', 'gon']
 candidates = ['george hotz', 'andrej karpathy']
 eform1 = {}
 rform = {}
@@ -32,7 +33,8 @@ class VoteSpider(scrapy.Spider):
                                 callback = self.get_eform1,
                                 dont_filter = True)
         except: 
-            print('done')
+            print('finished voting')
+            self.finish_election()
             return
     def get_eform1(self, response):
         eform1['msg'] = Selector(response=response).xpath('//*[@name="response"]//text()').extract()[0]
@@ -114,3 +116,8 @@ class VoteSpider(scrapy.Spider):
                                 dont_filter=True)
     def iterate(self, response):
         yield scrapy.Request(url=self.urls['cla_url'], callback=self.submit_cform, dont_filter = True)
+    def finish_election(self):
+        requests.post('http://localhost:4000/finish-election')
+        requests.post('http://localhost:3000/finish-election')
+        print('done')
+        return

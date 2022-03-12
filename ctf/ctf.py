@@ -25,7 +25,7 @@ skey = os.urandom(12).hex()
 app.secret_key = skey
 
 engine = create_engine('sqlite:///sqlite/ctf.db', echo=True)
-db_session = scoped_session(sessionmaker(autocommit=True,
+db_session = scoped_session(sessionmaker(autocommit=False,
                                          autoflush=True,
                                          bind=engine))
 Base = declarative_base()
@@ -130,19 +130,31 @@ class DHKE(Base):
         public = {self.public!r}
         shared key = {self.key!r}
         '''
+class Outcome(Base):
+    __tablename__ = 'outcomes'
+    __table_args__ = {'extend_existing': True}
 
+    result_message = Column(String, primary_key=True)
+
+    def __init__(self, msg):
+        self.result_message = msg
+    def __repr__(self):
+        return self.result_message
 def clear_class(c):
     instances = c.query.all()
     for i in instances:
         db_session.delete(i)
+    db_session.commit()
 
 def rsa_renew():
     clear_class(RSA)
     db_session.add(RSA())
+    db_session.commit()
 
 def dhke_renew():
     clear_class(DHKE)
     db_session.add(DHKE())
+    db_session.commit()
 
 def dhke_get_shared(A):
     dh = DHKE.query.one()
@@ -181,6 +193,36 @@ def decrypt(y, shared, n, e):
     msgs['rsa_dec'] = rsa.core.decrypt_int(int(msgs['aes_dec']), int(e), int(n)).to_bytes(hash_len, byteorder='big')
     return msgs['rsa_dec']
 
+def reset_all():
+    clear_class(Candidate)
+    clear_class(Vote)
+    clear_class(Outcome)
+    dhke_renew()
+    rsa_renew()
+
+def get_election_result():
+    candidates = Candidate.query.all()
+    cs = []
+    tallies = []
+    for c in candidates:
+        tallies.append(c.tally)
+        cs.append(c.name)
+    max_tally = max(tallies)
+    if tallies.count(max_tally) == 1:
+        ix = tallies.index(max_tally)
+        result = cs[ix] + ' won'
+    else:
+        ixs = [index for index, element in enumerate(tallies) if element == max_tally]
+        result = 'tie between: ' + cs[ixs[0]]
+        for i in ixs:
+            result += ', ' + cs[i]
+    result += ' with ' + str(max_tally) + ' votes'
+    o = Outcome(result)
+    print('outcome: ',o)
+    db_session.add(o)
+    db_session.commit()
+    return result
+
 @app.route("/", methods=['GET', 'POST'])
 def home(): 
     iform = InitForm(request.form)
@@ -189,10 +231,7 @@ def home():
     msgs = {}
     if request.method=='POST':
         if iform.init.data and iform.validate():
-            clear_class(Candidate)
-            clear_class(Vote)
-            dhke_renew()
-            rsa_renew()
+            reset_all()
 
         elif vform.castvote.data and vform.validate():
             print(vform.e_vn.data)
@@ -221,6 +260,7 @@ def home():
             if vn in vn_list and vn not in [v.hash_vn for v in votes]:
                 vote = Vote(vn, vform.candidate.data)
                 db_session.add(vote)
+                db_session.commit()
                 candidates = Candidate.query.all()
                 candidate = vform.candidate.data
                 print(candidate)
@@ -228,15 +268,24 @@ def home():
                 if candidate not in [c.name for c in candidates]:
                     candidate = Candidate(candidate)
                     db_session.add(candidate)
+                    db_session.commit()
                 else:
                     candidate = Candidate.query.filter_by(name=candidate).first()
                     candidate.tally +=1
                     db_session.add(candidate)
+                    db_session.commit()
     candidates = Candidate.query.all()
     votes = Vote.query.all()
     rsakeys = RSA.query.all()
     dhke = DHKE.query.all()
-    return render_template('home.html', iform=iform, vform=vform, votes=votes, candidates=candidates, rsakeys=rsakeys, dhke=dhke, res=res, msgs=msgs)
+    outcome = Outcome.query.all()
+    print(outcome)
+    return render_template('home.html', iform=iform, vform=vform, votes=votes, candidates=candidates, rsakeys=rsakeys,
+    dhke=dhke, res=res, msgs=msgs, outcome=outcome)
+@app.route("/init", methods=['POST'])
+def reset():
+    reset_all()
+    return 're-initialized'
 
 @app.route("/public-keys", methods=['GET'])
 def public_keys(): 
@@ -245,7 +294,12 @@ def public_keys():
     res = {}
     res['A'] =dh.public
     return res
-    
+
+@app.route("/finish-election", methods=['POST'])
+def finish_election():
+    result = get_election_result()
+    return result
+
 if __name__ == '__main__':
     with app.app_context():
         Base.metadata.create_all(bind=engine)       

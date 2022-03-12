@@ -1,5 +1,6 @@
 <div>
     {% for e in elections%}
-    <h3 style="text-align: center;">Election ends at: {{ e.end }}</h3>
+    <h3 style="text-align: center;">Election started at: {{ e.start }}</h3>
+    <h3 style="text-align:center;">Election {{e.status}}</h3>
     {% endfor %}
 </div>
