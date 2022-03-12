@@ -11,7 +11,6 @@ rform = {}
 dform = {}
 eform2 = {}
 vform = {}
-msgs = {}
 auto_finish = True
 class VoteSpider(scrapy.Spider):
     name = "votespider"
@@ -54,15 +53,6 @@ class VoteSpider(scrapy.Spider):
         rform['A']= Selector(response=response).xpath('//*[@name="A"]//text()').extract()[0]
         rform['rsapub_n'] = Selector(response=response).xpath('//*[@name="n"]//text()').extract()[0]
         rform['rsapub_e'] = Selector(response=response).xpath('//*[@name="e"]//text()').extract()[0]
-        '''
-        msgs['hash'] = Selector(response=response).xpath('//*[@name="hash"]//text()').extract()[0]
-        msgs['aes_enc'] = Selector(response=response).xpath('//*[@name="aes_enc"]//text()').extract()[0]
-        msgs['aes_dec'] = Selector(response=response).xpath('//*[@name="aes_dec"]//text()').extract()[0]
-        msgs['rsa_dec'] = Selector(response=response).xpath('//*[@name="rsa_dec"]//text()').extract()[0]
-        msgs['shared'] = Selector(response=response).xpath('//*[@name="shared"]//text()').extract()[0]
-        rform['msgs'] = str(msgs)
-        '''
-
         yield  scrapy.Request(url=self.urls['cla_url'], callback=self.submit_rform, dont_filter = True)
     def submit_rform(self, response):  
         yield FormRequest.from_response(response,
@@ -103,13 +93,6 @@ class VoteSpider(scrapy.Spider):
         vform['e_vn'] = Selector(response=response).xpath('//*[@name="response"]//text()').extract()[0]
         vform['n'] = Selector(response=response).xpath('//*[@name="n"]//text()').extract()[0]
         vform['e'] = Selector(response=response).xpath('//*[@name="e"]//text()').extract()[0]
-        '''
-        msgs['hash'] = Selector(response=response).xpath('//*[@name="hash"]//text()').extract()[0]
-        msgs['aes_enc'] = Selector(response=response).xpath('//*[@name="aes_enc"]//text()').extract()[0]
-        msgs['aes_dec'] = Selector(response=response).xpath('//*[@name="aes_dec"]//text()').extract()[0]
-        msgs['rsa_dec'] = Selector(response=response).xpath('//*[@name="rsa_dec"]//text()').extract()[0]
-        msgs['shared'] = Selector(response=response).xpath('//*[@name="shared"]//text()').extract()[0]
-        '''
         yield  scrapy.Request(url=self.urls['ctf_url'], callback=self.submit_vform, dont_filter = True)
     def submit_vform(self, response):
         yield FormRequest.from_response(response,
