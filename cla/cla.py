@@ -197,13 +197,19 @@ def renew_dhke():
     clear_class(DHKE)
     db_session.add(DHKE())
     db_session.commit()
+
 def renew_rsa():
     clear_class(RSA)
     db_session.add(RSA())
     db_session.commit()
 
 def dhke_get_shared(A):
+    assert type(A) == int
     dh = DHKE.query.one()
+    shared = pow(int(A), int(dh.a), int(dh.p))
+    db_session.delete(dh)
+    db_session.add(DHKE())
+    db_session.commit()
     return pow(int(A), int(dh.a), int(dh.p))
 
 def get_aes(shared):
@@ -223,11 +229,10 @@ def decrypt(y, aes, n, e):
     assert type(n) == int
     assert type(e) == int
     msgs = {}
-    msgs['aes_enc'] = y
-    msgs['aes_dec'] = aes.decrypt(msgs['aes_enc'])
+    msgs['aes_dec'] = aes.decrypt(y)
     msgs['aes_dec'] = str(msgs['aes_dec']).split('\\')[0][2:]
     msgs['rsa_dec'] = rsa.core.decrypt_int(int(msgs['aes_dec']), e, n).to_bytes(hash_len, byteorder='big')
-    return msgs
+    return msgs['rsa_dec']
 
 def encrypt(x, aes):
     assert type(x) == int
@@ -236,7 +241,7 @@ def encrypt(x, aes):
     msgs['intx'] = x
     msgs['rsa_enc'] = rsa.core.encrypt_int(x, int(rsakeys.d), int(rsakeys.n))
     msgs['aes_enc'] = aes.encrypt(str(msgs['rsa_enc']))
-    return msgs
+    return msgs['aes_enc']
 
 def encrypt_bytes(x, shared):
     assert type(shared) == int
@@ -255,7 +260,6 @@ def home():
     iform = InitForm(request.form)
     cform = CreateForm(request.form)
     rform = RegisterForm(request.form)
-    msgs = {}
     res = []
     if request.method=='POST':
         if cform.create.data and cform.validate():
@@ -272,20 +276,16 @@ def home():
         
             shared = dhke_get_shared(A)
             aes = get_aes(shared)
-            y = e_id
-            msgs['aes_enc'] = y
-            msgs['aes_dec'] = aes.decrypt(msgs['aes_enc'])
-            msgs['aes_dec'] = str(msgs['aes_dec']).split('\\')[0][2:]
-            msgs['rsa_dec'] = rsa.core.decrypt_int(int(msgs['aes_dec']), e, n).to_bytes(hash_len, byteorder='big')
+            x = decrypt(e_id, aes, n, e)
             citizens = Citizen.query.all()
             voters = Voter.query.all()
-            if msgs['rsa_dec'] in [c.hash_id for c in citizens] and msgs['rsa_dec'] not in [v.hash_id for v in voters]:
+            if x in [c.hash_id for c in citizens] and x not in [v.hash_id for v in voters]:
                 vn = random.SystemRandom().randint(1000000000, 9999999999)
-                voter = Voter(msgs['rsa_dec'], str(vn), str(shared))
+                voter = Voter(x, str(vn), str(shared))
                 db_session.add(voter)
                 db_session.commit()
-                msgs = encrypt(vn, aes)
-                res.append(msgs['aes_enc'])
+                e_vn = encrypt(vn, aes)
+                res.append(e_vn)
 
         elif iform.init.data and iform.validate():
             clear_all_classes()
@@ -296,19 +296,19 @@ def home():
             requests.post('http://localhost:4000/init')
 
     citizens, voters, elections, rsakeys, dhke = query_all_classes()
-    return render_template('home.html', iform=iform, cform=cform, rform=rform, msgs=msgs, citizens=citizens, voters=voters, elections=elections, rsakeys=rsakeys, dhke=dhke, res=res)
+    return render_template('home.html', iform=iform, cform=cform, rform=rform, citizens=citizens, voters=voters, elections=elections, rsakeys=rsakeys, dhke=dhke, res=res)
 
 @app.route("/vn-list", methods=['GET'])
 def get_vn_list(): 
     res = requests.get('http://localhost:4000/public-keys')
     resdict = literal_eval(res._content.decode())
     A = int(resdict['A'])
-    shared = dhke_get_shared(A)
     dh = DHKE.query.one()
-
-    renew_dhke()
+    shared = pow(int(A), int(dh.a), int(dh.p))
+    db_session.delete(dh)
+    db_session.add(DHKE())
+    db_session.commit()
     voters = Voter.query.all()
-
     e_vns = [str(encrypt_bytes(v.hash_vn, shared)) for v in voters]
     rsakeys = RSA.query.one()
     return jsonify({"e_vns": e_vns, "A": dh.public, "n": rsakeys.n, "e":rsakeys.e})

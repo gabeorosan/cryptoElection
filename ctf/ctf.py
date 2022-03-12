@@ -1,4 +1,4 @@
-from flask import Flask, redirect, render_template, request
+from flask import Flask, render_template, request
 import os
 from sqlalchemy import Column, String, BLOB, Integer
 from sqlalchemy import create_engine
@@ -169,31 +169,10 @@ def dhke_renew():
     db_session.add(DHKE())
     db_session.commit()
 
-def dhke_get_shared(A):
-    dh = DHKE.query.one()
-    dhke_renew()
-    return pow(int(A), int(dh.a), int(dh.p))
-
 def get_aes(shared):
     assert type(shared) == str
     key = mash(shared)
     return AESCipher(key)
-
-def rsa_sign(x):
-    assert type(x) == int
-    rsakeys = RSA.query.one()
-    return rsa.core.encrypt_int(x,int(rsakeys.d),int(rsakeys.n))
-
-def rsa_sign_encrypt(x, n, e):
-    assert type(x) == int
-    assert type(n) == int
-    assert type(e) == int
-    rsakeys = RSA.query.one()
-    msgs = {}
-    msgs['x'] = x
-    msgs['rsa_signed'] = rsa.core.encrypt_int(x,rsakeys.d,rsakeys.n)
-    msgs['rsa_enc'] = rsa.core.encrypt_int(msgs['rsa_signed'], e, n)
-    return msgs
 
 def decrypt(y, shared, n, e):
     assert type(shared) == int
@@ -240,7 +219,6 @@ def home():
     iform = InitForm(request.form)
     vform = VoteForm(request.form)
     res = []
-    msgs = {}
     outcome = Outcome.query.all()
     if request.method=='POST':
         if iform.init.data and iform.validate():
@@ -255,13 +233,17 @@ def home():
                 n = int(vform.n.data)
                 e = int(vform.e.data)
                 
-                voter_shared = dhke_get_shared(A)
+                voter_dh = DHKE.query.one()
+                cla_dh = DHKE()
+                db_session.delete(voter_dh)
+                db_session.add(cla_dh)
+                db_session.commit()
+                voter_shared = pow(A, int(voter_dh.a), int(voter_dh.p))
                 vn_res = requests.get('http://localhost:3000/vn-list')
                 resdict = vn_res.json()
-                cla_A = resdict['A']
+                cla_A = int(resdict['A'])
                 vn = decrypt(e_vn, voter_shared, n, e)
-
-                cla_shared = dhke_get_shared(cla_A)
+                cla_shared = pow(cla_A, int(cla_dh.a), int(cla_dh.p))
                 vn_list = [decrypt(literal_eval(v), cla_shared, resdict['n'], resdict['e']) for v in resdict['e_vns']]
                 votes = Vote.query.all()
                 if vn in vn_list and vn not in [v.hash_vn for v in votes]:
@@ -282,8 +264,7 @@ def home():
                     res.append('Vote successful')
                 else:res.append('Vote unsuccessful')
     candidates, votes, rsakeys, dhke, outcome= query_all_classes()
-    return render_template('home.html', iform=iform, vform=vform, votes=votes, candidates=candidates, rsakeys=rsakeys,
-    dhke=dhke, res=res, msgs=msgs, outcome=outcome)
+    return render_template('home.html', iform=iform, vform=vform, votes=votes, candidates=candidates, rsakeys=rsakeys, dhke=dhke, res=res, outcome=outcome)
 
 @app.route("/init", methods=['POST'])
 def init():
@@ -295,6 +276,8 @@ def public_keys():
     rsakeys = RSA.query.one()
     dh = DHKE.query.one()
     res = {'A': dh.public}
+    db_session.delete(dh)
+    db_session.add(DHKE())
     return res
 
 @app.route("/finish-election", methods=['POST'])

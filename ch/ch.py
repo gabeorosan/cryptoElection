@@ -106,9 +106,11 @@ def mash(x):
 
 def dhke_get_shared(A):
     assert type(A) == int
-    dh = DHKE.query.one()
+    dh = DHKE()
     shared = str(pow(int(A), int(dh.a), int(dh.p)))
     dh.key = shared
+    old_dh = DHKE.query.one()
+    db_session.delete(old_dh)
     db_session.add(dh)
     db_session.commit()
     return shared
@@ -145,10 +147,7 @@ def encrypt(x, aes):
     msgs['intx'] = intx
     msgs['rsa_enc'] = rsa.core.encrypt_int(intx, int(rsakeys.d), int(rsakeys.n))
     msgs['aes_enc'] = aes.encrypt(str(msgs['rsa_enc']))
-    msgs['aes_dec'] = aes.decrypt(msgs['aes_enc'])
-    msgs['aes_dec'] = str(msgs['aes_dec']).split('\\')[0][2:]
-    msgs['rsa_dec'] = rsa.core.decrypt_int(int(msgs['aes_dec']), int(rsakeys.e), int(rsakeys.n)).to_bytes(hash_len, byteorder='big')
-    return msgs
+    return msgs['aes_enc']
 
 def decrypt(y, aes, n, e):
     assert type(y) == bytes
@@ -159,14 +158,13 @@ def decrypt(y, aes, n, e):
     msgs['aes_dec'] = aes.decrypt(msgs['aes_enc'])
     msgs['aes_dec'] = str(msgs['aes_dec']).split('\\')[0][2:]
     msgs['rsa_dec'] = rsa.core.decrypt_int(int(msgs['aes_dec']), int(e), int(n)).to_bytes(hash_len, byteorder='big')
-    return msgs
+    return msgs['rsa_dec']
 
 @app.route("/", methods=['GET', 'POST'])
 def home():
     iform = InitForm(request.form)
     eform = EncryptForm(request.form)
     dform = DecryptForm(request.form)
-    msgs = {}
     res = []
     if request.method=='POST':
         if iform.init.data and iform.validate():
@@ -179,17 +177,17 @@ def home():
             msg = literal_eval(eform.msg.data)
             if type(msg) == bytes:
                 msg = int.from_bytes(msg, 'big')
-            msgs = encrypt(str(msg), aes)
-            res.append(msgs['aes_enc'])
+            y = encrypt(str(msg), aes)
+            res.append(y)
         elif dform.decrypt.data and dform.validate():
             n = int(dform.rsapub_n.data)
             e = int(dform.rsapub_e.data)
             msg = literal_eval(dform.msg.data)
-            dh = DHKE.query.all()[0]
+            dh = DHKE.query.one()
             shared = int(dh.key)
             aes = get_aes(str(shared))
-            msgs = decrypt(msg, aes, n, e)
-            res.append(msgs['rsa_dec'])
+            x = decrypt(msg, aes, n, e)
+            res.append(x)
 
             if len(res) > 0:
                 if type(res[0]) == bytes:
@@ -197,8 +195,7 @@ def home():
 
     rsakeys = RSA.query.all()
     dhke = DHKE.query.all()
-    return render_template('home.html', iform=iform, eform=eform, dform=dform, rsakeys=rsakeys, dhke=dhke, msgs=msgs,
-    res=res)
+    return render_template('home.html', iform=iform, eform=eform, dform=dform, rsakeys=rsakeys, dhke=dhke, res=res)
 
 if __name__ == '__main__':
     with app.app_context():
