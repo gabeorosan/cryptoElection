@@ -16,7 +16,7 @@ from ast import literal_eval
 app = Flask(__name__)
 app.secret_key = os.urandom(12).hex()
 
-engine = create_engine('sqlite:///sqlite/ch.db', echo=True)
+engine = create_engine('sqlite:///ch/sqlite/ch.db', echo=True)
 db_session = scoped_session(sessionmaker(autocommit=False,
                                          autoflush=True,
                                          bind=engine))

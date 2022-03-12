@@ -23,7 +23,7 @@ app.secret_key = skey
 root_url = 'http://localhost:4000/'
 election_length = 5
 
-engine = create_engine('sqlite:///sqlite/cla.db', echo=True)
+engine = create_engine('sqlite:///cla/sqlite/cla.db', echo=True)
 db_session = scoped_session(sessionmaker(autocommit=False,
                                          autoflush=True,
                                          bind=engine))

@@ -19,7 +19,7 @@ app = Flask(__name__)
 skey = os.urandom(12).hex()
 app.secret_key = skey
 
-engine = create_engine('sqlite:///sqlite/ctf.db', echo=True)
+engine = create_engine('sqlite:///ctf/sqlite/ctf.db', echo=True)
 db_session = scoped_session(sessionmaker(autocommit=False,
                                          autoflush=True,
                                          bind=engine))
