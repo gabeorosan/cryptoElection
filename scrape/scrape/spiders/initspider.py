@@ -2,7 +2,6 @@ import scrapy
 from scrapy import FormRequest
 from scrapy.selector import Selector
 from scrapy.http import HtmlResponse
-import random
 
 class InitSpider(scrapy.Spider):
     name = "initspider"

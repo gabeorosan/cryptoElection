@@ -6,12 +6,9 @@ cffi==1.15.0
 charset-normalizer==2.0.12
 click==8.0.4
 constantly==15.1.0
-crypto==1.4.1
-cryptography==36.0.1
 cssselect==1.1.0
 filelock==3.6.0
 Flask==2.0.3
-Flask-RESTful==0.3.9
 greenlet==1.1.2
 hyperlink==21.0.0
 idna==3.3
@@ -23,7 +20,6 @@ Jinja2==3.0.3
 jmespath==0.10.0
 lxml==4.8.0
 MarkupSafe==2.1.0
-marshmallow==3.14.1
 Naked==0.1.31
 parsel==1.6.0
 Protego==0.2.1
