@@ -1,4 +1,4 @@
-from flask import Flask, redirect, render_template, request, flash, url_for, make_response, jsonify
+from flask import Flask, render_template, request, jsonify
 import os
 import rsa
 from sqlalchemy import Column, String, Integer, BLOB
@@ -7,17 +7,22 @@ from sqlalchemy.orm import scoped_session, sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 from CreateForm import CreateForm
 from RegisterForm import RegisterForm
-from ElectionForm import ElectionForm
 from InitForm import InitForm
 import datetime
+from datetime import timedelta
 import random
 import pyDHE
 import hashlib
 from ciphers import AESCipher
 import requests
+from ast import literal_eval
+
 app = Flask(__name__)
 skey = os.urandom(12).hex()
 app.secret_key = skey
+root_url = 'http://localhost:4000/'
+election_length = 5
+
 
 engine = create_engine('sqlite:///sqlite/cla.db', echo=True)
 db_session = scoped_session(sessionmaker(autocommit=False,
@@ -71,17 +76,39 @@ class Voter(Base):
     def __repr__(self):
         return f'<Voter id {self.hash_id!r} hash vn = {self.hash_vn!r} Shared key = {self.shared!r}>'
 
+def zpad(t):
+    t = str(t)
+    if len(t) == 1: return '0' + t
+    return t
+
 class Election(Base):
     __tablename__ = 'election'
     __table_args__ = {'extend_existing': True} 
     start = Column(String, primary_key=True)
+    end = Column(String)
+    current_time = Column(Integer)
     status = Column(String)
     
-    def __init__(self, start):
-        self.start = start
+    def __init__(self):
+        start = datetime.datetime.now()
+        end = start + timedelta(minutes=election_length)
+        self.current_time = (end - start).seconds
+        self.start = str(start)
+        self.end = str(end)
         self.status = 'In progress'
+    def decrement(self):
+        sec = self.current_time
+        if sec > 0:
+            sec -= 1
+            print(self.current_time)
+            self.current_time = sec
+            time_disp = zpad(sec//60) + ':' + zpad(sec%60)
+            return time_disp
+
+        self.status = 'Finished'
+        return 0
     def __repr__(self):
-        return f'<Start time {self.start!r} {self.status}>'
+        return f'<Start time {self.start!r} {self.status} {self.current_time}>'
 
 class RSA(Base):
     __tablename__ = 'rsa'
@@ -259,13 +286,13 @@ def home():
 
         elif rform.register.data and rform.validate():
             print(rform.e_id.data)
-            e_id = eval(rform.e_id.data)
+            e_id = literal_eval(rform.e_id.data)
             A = int(rform.A.data)
             n = int(rform.rsapub_n.data)
             e = int(rform.rsapub_e.data)
             if rform.msgs.data:
-                ch_msgs = eval(rform.msgs.data)
-                enc_id = eval(ch_msgs['aes_enc'])
+                ch_msgs = literal_eval(rform.msgs.data)
+                enc_id = literal_eval(ch_msgs['aes_enc'])
                 assert enc_id == e_id
                 shared = dhke_get_shared(A)
                 assert shared == int(ch_msgs['shared'])
@@ -275,7 +302,7 @@ def home():
                 msgs['aes_dec'] = aes.decrypt(msgs['aes_enc'])
                 msgs['aes_dec'] = str(msgs['aes_dec']).split('\\')[0][2:]
                 msgs['rsa_dec'] = rsa.core.decrypt_int(int(msgs['aes_dec']), e, n).to_bytes(hash_len, byteorder='big')
-                assert eval(ch_msgs['hash']) == msgs['rsa_dec']
+                assert literal_eval(ch_msgs['hash']) == msgs['rsa_dec']
                 citizens = Citizen.query.all()
                 voters = Voter.query.all()
                 assert msgs['rsa_dec']== citizens[-1].hash_id
@@ -320,9 +347,7 @@ def home():
             clear_all_classes()
             renew_rsa()
             renew_dhke()
-            start = datetime.datetime.now()
-            election = Election(start)
-            db_session.add(election)
+            db_session.add(Election())
             db_session.commit()
             requests.post('http://localhost:4000/init')
     if 'res' in msgs.keys():
@@ -334,11 +359,10 @@ def home():
 @app.route("/vn-list", methods=['GET'])
 def get_vn_list(): 
     res = requests.get('http://localhost:4000/public-keys')
-    resdict = eval(res._content.decode())
+    resdict = literal_eval(res._content.decode())
     A = int(resdict['A'])
     shared = dhke_get_shared(A)
     dh = DHKE.query.one()
-
 
     renew_dhke()
     voters = Voter.query.all()
@@ -346,16 +370,29 @@ def get_vn_list():
     print(voters)
     e_vns = [str(encrypt_sign(v.hash_vn, shared)) for v in voters]
     rsakeys = RSA.query.one()
+    
     return {'e_vns': e_vns, 'A': dh.public, 'n': rsakeys.n, 'e':rsakeys.e}
 
 @app.route("/finish-election", methods=['POST'])
 def finish_election():
     e = Election.query.one()
+    e.current_time = 0
     e.status = "Finished"
     db_session.add(e)
     db_session.commit()
     print('done')
     return
+
+@app.route("/_timer", methods=["GET", "POST"])
+def timer():
+    e = Election.query.one()
+    new_time = e.decrement()
+    if not new_time:
+        finish_election()
+        requests.post('http://localhost:4000/finish-election')
+    db_session.add(e)
+    db_session.commit()
+    return jsonify({"result": new_time})
 
 if __name__ == '__main__':
     with app.app_context():

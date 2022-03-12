@@ -1,25 +1,20 @@
-from sys import byteorder
-from flask import Flask, redirect, render_template, request, flash, url_for, make_response, jsonify
-from flask_restful import reqparse, abort, Api, Resource
+from flask import Flask, render_template, request
 import os
-from sqlalchemy import Column, String, Integer
+from sqlalchemy import Column, String
 from sqlalchemy import create_engine
 from sqlalchemy.orm import scoped_session, sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 from InitForm import InitForm
 from EncryptForm import EncryptForm
 from DecryptForm import DecryptForm
-import datetime
-import random
-import requests
 import rsa
 from ciphers import AESCipher 
 import hashlib
 import pyDHE
+from ast import literal_eval
 
 app = Flask(__name__)
 app.secret_key = os.urandom(12).hex()
-
 
 engine = create_engine('sqlite:///sqlite/ch.db', echo=True)
 db_session = scoped_session(sessionmaker(autocommit=False,
@@ -118,8 +113,8 @@ def clear_class(c):
     instances = c.query.all()
     for i in instances:
         db_session.delete(i)
-
     db_session.commit()
+
 def dhke_renew():
     clear_class(DHKE)
     db_session.add(DHKE())
@@ -180,10 +175,9 @@ def home():
             A = int(eform.A.data)
             shared = dhke_get_shared(A)
             aes = get_aes(shared)
-            msg = eval(eform.msg.data)
+            msg = literal_eval(eform.msg.data)
             if type(msg) == bytes:
                 msg = int.from_bytes(msg, 'big')
-            
             msgs = encrypt(str(msg), aes)
             res.append(msgs['aes_enc'])
         elif dform.decrypt.data and dform.validate():
@@ -193,7 +187,7 @@ def home():
             dh = DHKE.query.all()[0]
             shared = int(dh.key)
             aes = get_aes(str(shared))
-            y = eval(msg)
+            y = literal_eval(msg)
             assert type(y) == bytes
             assert type(n) == int
             assert type(e) == int

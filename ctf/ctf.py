@@ -9,7 +9,6 @@ from sqlalchemy.orm import scoped_session, sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 from VoteForm import VoteForm
 from InitForm import InitForm
-from marshmallow import Schema, fields
 import datetime
 import random
 import requests
@@ -17,6 +16,7 @@ import rsa
 import pyDHE
 from ciphers import AESCipher
 import hashlib
+from ast import literal_eval
 
 hash_len = 20
 
@@ -229,56 +229,58 @@ def home():
     vform = VoteForm(request.form)
     res = {}
     msgs = {}
+    outcome = Outcome.query.all()
     if request.method=='POST':
         if iform.init.data and iform.validate():
             reset_all()
 
         elif vform.castvote.data and vform.validate():
-            print(vform.e_vn.data)
-            e_vn = eval(vform.e_vn.data)
-            candidate = vform.candidate.data
-            A = int(vform.A.data)
-            n = int(vform.n.data)
-            e = int(vform.e.data)
-
-            voter_shared = dhke_get_shared(A)
-            #dhke_renew()
-            dh = DHKE.query.one()
-            dhres = requests.get('http://localhost:3000/vn-list')
-            resdict = eval(dhres._content)
-            cla_A = resdict['A']
-            cla_shared = dhke_get_shared(cla_A)
-            
-            vn = decrypt(e_vn, voter_shared, n, e)
-            vn_list = [decrypt(eval(v), cla_shared, resdict['n'], resdict['e']) for v in resdict['e_vns']]
-            if vn not in vn_list:
-                assert False
-                print(vn, vn_list)
-                print(e_vn)
-                print(len(e_vn))
-            votes = Vote.query.all()
-            if vn in vn_list and vn not in [v.hash_vn for v in votes]:
-                vote = Vote(vn, vform.candidate.data)
-                db_session.add(vote)
-                db_session.commit()
-                candidates = Candidate.query.all()
+            if not len(outcome):
+                print(vform.e_vn.data)
+                e_vn = eval(vform.e_vn.data)
                 candidate = vform.candidate.data
-                print(candidate)
-                print([c.name for c in candidates])
-                if candidate not in [c.name for c in candidates]:
-                    candidate = Candidate(candidate)
-                    db_session.add(candidate)
+                A = int(vform.A.data)
+                n = int(vform.n.data)
+                e = int(vform.e.data)
+
+                voter_shared = dhke_get_shared(A)
+                dhke_renew()
+                dh = DHKE.query.one()
+                dhres = requests.get('http://localhost:3000/vn-list')
+                resdict = eval(dhres._content)
+                cla_A = resdict['A']
+                cla_shared = dhke_get_shared(cla_A)
+                
+                vn = decrypt(e_vn, voter_shared, n, e)
+                vn_list = [decrypt(eval(v), cla_shared, resdict['n'], resdict['e']) for v in resdict['e_vns']]
+                if vn not in vn_list:
+                    assert False
+                    print(vn, vn_list)
+                    print(e_vn)
+                    print(len(e_vn))
+                votes = Vote.query.all()
+                if vn in vn_list and vn not in [v.hash_vn for v in votes]:
+                    vote = Vote(vn, vform.candidate.data)
+                    db_session.add(vote)
                     db_session.commit()
-                else:
-                    candidate = Candidate.query.filter_by(name=candidate).first()
-                    candidate.tally +=1
-                    db_session.add(candidate)
-                    db_session.commit()
+                    candidates = Candidate.query.all()
+                    candidate = vform.candidate.data
+                    print(candidate)
+                    print([c.name for c in candidates])
+                    if candidate not in [c.name for c in candidates]:
+                        candidate = Candidate(candidate)
+                        db_session.add(candidate)
+                        db_session.commit()
+                    else:
+                        candidate = Candidate.query.filter_by(name=candidate).first()
+                        candidate.tally +=1
+                        db_session.add(candidate)
+                        db_session.commit()
     candidates = Candidate.query.all()
     votes = Vote.query.all()
     rsakeys = RSA.query.all()
     dhke = DHKE.query.all()
-    outcome = Outcome.query.all()
+    
     print(outcome)
     return render_template('home.html', iform=iform, vform=vform, votes=votes, candidates=candidates, rsakeys=rsakeys,
     dhke=dhke, res=res, msgs=msgs, outcome=outcome)

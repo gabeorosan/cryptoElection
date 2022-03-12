@@ -1,6 +1,30 @@
 <div>
     {% for e in elections%}
-    <h3 style="text-align: center;">Election started at: {{ e.start }}</h3>
-    <h3 style="text-align:center;">Election {{e.status}}</h3>
+    <div style="border: 2px black solid;">
+    <h3 id="status" style="text-align:center;">Loading...</h3>
+
+    <h3 id="result" style="text-align:center"><br></h3>
+    </div>
+   <script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script>
+   <script>window.jQuery || document.write('<script src="{{ url_for('static', filename='jquery.js') }}">\x3C/script>')</script>
+   <script type="text/javascript">
+      const root_url = {{request.root_url|tojson|safe}};
+      const intervalID = setInterval(update_values, 1000);
+      function update_values() {
+        $.getJSON(
+          root_url + "_timer",
+          data => {
+            $("#status").text(data.result ? 'Election in progress' : 'Election finished')
+            $("#result").text('Time left: ' + data.result);
+            if (data.result == 0) {
+              clearInterval(intervalID);
+                $("#result").text('Go to CTF to view results')
+            }
+
+          }
+        )
+      }
+   </script>
     {% endfor %}
+
 </div>
