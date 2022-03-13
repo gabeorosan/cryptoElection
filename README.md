@@ -40,20 +40,21 @@ that the script is making requests to each webpage, submitting the forms, and ge
 form for 5 voters so it may take 10-15 seconds. From there, you can also navigate to the CLA and Cipher helper pages from the navbar. Additionally, you can add voters and
 adjust other parameters for the simulation in the scrape/spiders/votespiders.py file.
 
-If you want to go through the voting process yourself, this is the process:
+If you want to go through the voting process yourself:
 
 1. Navigate to the Central Legitimization Agency (CLA) page at [localhost:3000/](http://localhost:3000/). Note that
 there is a default time for the election of 5 minutes, so the clock is ticking! Just kidding, you can change the
-election time at the top of the CLA.py file if you want more time. On the CLA page, you can create a citizen by entering a name
-and clicking create. Whenever you submit a form, there should be response text that pops up that you will want to copy. In this case, this contains
-the ID number for the citizen you made (like an SSN).
+election time at the top of the cla/cla.py file if you want more time. On the CLA page, you can create a citizen by entering a name
+and clicking create. Whenever you submit a form, there should be response text that pops up that you will want to copy.
+In this case, it contains the ID number for the citizen you made (like an SSN).
 
 2. Open a different tab to the Cipher Helper (CH) page at [localhost:5000/](http://localhost:5000/). This is where you will be able to encrypt and
-decrypt messages. Start by pasting your ID into the message input, and get the public exponent A from the CLA page for
-the other input (the public info you need to copy is highlighted in green). Click encrypt, and copy the response
+decrypt messages. Start by pasting your ID into the message input, and get the Diffie-Hellman Key Exchange (DHKE) public
+key (A) from the CLA page for the other input (public info for you to use is highlighted in green). Click encrypt, and copy the response
 (easiest way is just to click on the far left of it and drag down).
 
-3. Input your encrypted id and the other required information from the CH page into the register form on the CLA page
+3. Input your encrypted id and the other required information, including your Rivest–Shamir–Adleman (RSA) public
+exponent e and modulus n, from the CH page into the register form on the CLA page
 and click register. Take the encrypted response, and the other required information from the CLA page and paste it into
 the decryption form on the CH page. Decrypt the message - this is your validation number (VN).
 
@@ -77,6 +78,16 @@ scrapy crawl votespider
 The results are displayed on the CTF page. If you want to run another election, you can re-initialize the CLA by
 clicking the first button on that page, which automatically starts a new election and clears the votes & candidates from
 the CTF page. 
+
+The election is secured by using a DHKE protocol for each transaction to create an AES key and uses RSA private key
+encryption for authentication. Obviously, the information displayed on the CLA and CTF pages is just for
+vizualization and should not be displayed publicly in a real implementation - none of the user or agency actions access
+any unauthorized information without using the aforementioned cryptosystems for security. Because of this, it should be
+possible to use another service to do your encryption/decryption as long as the key sizes and hash functions are the
+same but the Cipher Helper server is provided to make it less tedious to actually partake in the voting yourself. This
+is clearly NOT a production-grade system and assumes there is nobody malicious messing with HTTP requests (for
+example, re-initializing the CLA or CTF), although there is no sensitive information that is sent without encryption and
+no "fake" validation numbers or votes can be added this way.
 
 ## License
 [MIT](https://choosealicense.com/licenses/mit/)
