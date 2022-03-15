@@ -65,7 +65,8 @@ the CTF page to fill out the encryption form. Encrypt your VN and copy the respo
 5. Finally, go to the CTF page and fill out the vote form with your VN and info from your Cipher Helper page, along with the candidate you wish to vote for (there is
 no designated list, any new candidates will simply be added to the list of candidates when the vote is processed). You
 should see your vote pop up (as long as you completed the process in time) and the candidate you voted for getting a
-tally.
+tally. Note that the DHKE keys will change with each transaction, so make sure you are using the most recent ones (you
+might have to refresh if you started a new election).
 
 The election will automatically end when time runs out, but if you want to see the results right away you can run the
 vote script from the main folder (which you should still be in if you didn't navigate to any files), which simulates 5

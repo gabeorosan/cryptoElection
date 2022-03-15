@@ -15,10 +15,12 @@
           root_url + "_timer",
           data => {
             $("#status").text(data.result ? 'Election in progress' : 'Election finished')
-            $("#result").text('Time left: ' + data.result);
             if (data.result == 0) {
               clearInterval(intervalID);
                 $("#result").text('Go to CTF to view results')
+            } else{
+                $("#result").text('Time left: ' + data.result);
+            
             }
 
           }
