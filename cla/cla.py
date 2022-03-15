@@ -101,7 +101,6 @@ class Election(Base):
             self.current_time = sec
             time_disp = self.zpad(sec//60) + ':' + self.zpad(sec%60)
             return time_disp
-        self.status = 'Finished'
         return 0
 
 class RSA(Base):
@@ -368,7 +367,7 @@ def finish_election():
 def timer():
     e = Election.query.one()
     new_time = e.decrement()
-    if not new_time:
+    if not new_time and e.status != "Finished":
         finish_election()
         requests.post('http://localhost:4000/finish-election')
     db_session.add(e)

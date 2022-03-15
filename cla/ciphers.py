@@ -1,8 +1,5 @@
 from Crypto.Cipher import AES
-from Crypto import Random
 import base64
-import hashlib
-import os
 class AESCipher(object):
 
     def __init__(self, key):

@@ -1,14 +1,10 @@
 from Crypto.Cipher import AES
-from Crypto import Random
 import base64
-import hashlib
-import os
 class AESCipher(object):
 
     def __init__(self, key):
         self.bs = AES.block_size
         self.key = key
-        #b'\xf7&\\d\x7f\x04\xbe\x0b\x19\xf0\xfd\x15\x83K\x9d}'
 
     def encrypt(self, raw):
         raw = self._pad(raw)
