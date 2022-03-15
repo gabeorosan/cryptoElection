@@ -82,7 +82,7 @@ the CTF page.
 
 The election is secured by using a DHKE protocol for each transaction to create an AES key and uses RSA private key
 encryption for authentication. Obviously, the information displayed on the CLA and CTF pages is just for
-vizualization and should not be displayed publicly in a real implementation - none of the user or agency actions access
+vizualization and should not be displayed publicly in a real implementation. None of the user or agency actions access
 any unauthorized information without using the aforementioned cryptosystems for security. Because of this, it should be
 possible to use another service to do your encryption/decryption as long as the key sizes and hash functions are the
 same but the Cipher Helper server is provided to make it less tedious to actually partake in the voting yourself. This
